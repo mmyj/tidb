@@ -174,6 +174,10 @@ func (b *{{.SigName}}) vectorized() bool {
 {{ end }}{{/* range */}}
 `))
 
+var builtinValuesTmpl = template.Must(template.New("builtinValuesTmpl").Parse(`
+	
+`))
+
 var testFile = template.Must(template.New("").Parse(`// Copyright 2019 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");

@@ -19,11 +19,35 @@ import (
 )
 
 func (b *builtinValuesIntSig) vectorized() bool {
-	return false
+	return true
 }
 
 func (b *builtinValuesIntSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	return errors.Errorf("not implemented")
+	n := input.NumRows()
+	result.ResizeInt64(n, true)
+	if !b.ctx.GetSessionVars().StmtCtx.InInsertStmt {
+		return nil
+	}
+
+	argLen := len(b.args)
+	if b.offset >= argLen {
+		return errors.Errorf("Session current insert values len %d and column's offset %v don't match", argLen, b.offset)
+	}
+	if err := b.args[b.offset].VecEvalString(b.ctx, input, result); err != nil {
+		return err
+	}
+
+	isEmpty := true
+	for i := 0; i < n; i++ {
+		if !result.IsNull(i) {
+			isEmpty = false
+			break
+		}
+	}
+	if isEmpty {
+		return errors.New("Session current insert values is nil")
+	}
+	return nil
 }
 
 func (b *builtinValuesDurationSig) vectorized() bool {
