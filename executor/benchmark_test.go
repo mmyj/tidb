@@ -398,6 +398,15 @@ func buildWindowExecutor(ctx sessionctx.Context, windowFunc string, src Executor
 		args = append(args, partitionBy[0])
 	}
 	desc, _ := aggregation.NewWindowFuncDesc(ctx, windowFunc, args)
+
+	switch windowFunc {
+	case ast.AggFuncSum, ast.AggFuncAvg,
+		ast.AggFuncMax, ast.AggFuncMin,
+		ast.AggFuncCount, ast.AggFuncFirstRow, ast.AggFuncGroupConcat,
+		ast.AggFuncBitAnd, ast.AggFuncBitOr, ast.AggFuncBitXor:
+		desc.Name = windowFunc
+	}
+
 	plan.WindowFuncDescs = []*aggregation.WindowFuncDesc{desc}
 	for _, col := range partitionBy {
 		plan.PartitionBy = append(plan.PartitionBy, property.Item{Col: col})
@@ -496,6 +505,23 @@ func BenchmarkWindowRows(b *testing.B) {
 			cas.rows = row
 			cas.ndv = ndv
 			cas.windowFunc = ast.WindowFuncRowNumber // cheapest
+			b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
+				benchmarkWindowExecWithCase(b, cas)
+			})
+		}
+	}
+}
+
+func BenchmarkWindowAggFuncCount(b *testing.B) {
+	b.ReportAllocs()
+	rows := []int{1000, 100000}
+	ndvs := []int{10, 1000}
+	for _, row := range rows {
+		for _, ndv := range ndvs {
+			cas := defaultWindowTestCase()
+			cas.rows = row
+			cas.ndv = ndv
+			cas.windowFunc = ast.AggFuncCount // cheapest
 			b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
 				benchmarkWindowExecWithCase(b, cas)
 			})
