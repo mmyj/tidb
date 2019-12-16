@@ -446,6 +446,14 @@ func (a windowTestCase) columns() []*expression.Column {
 		{Index: 3, RetType: types.NewFieldType(mysql.TypeLonglong)},
 	}
 }
+func (a windowTestCase) sumIntColumns() []*expression.Column {
+	return []*expression.Column{
+		{Index: 0, RetType: types.NewFieldType(mysql.TypeLonglong)},
+		{Index: 1, RetType: types.NewFieldType(mysql.TypeLonglong)},
+		{Index: 2, RetType: types.NewFieldType(mysql.TypeLonglong)},
+		{Index: 3, RetType: types.NewFieldType(mysql.TypeLonglong)},
+	}
+}
 
 func (a windowTestCase) String() string {
 	return fmt.Sprintf("(func:%v, ndv:%v, rows:%v)",
@@ -511,8 +519,8 @@ func benchmarkWindowExecWithCase(b *testing.B, casTest *windowTestCase) {
 
 func BenchmarkWindowRows(b *testing.B) {
 	b.ReportAllocs()
-	rows := []int{1000, 100000}
-	ndvs := []int{10, 1000}
+	rows := []int{1000}
+	ndvs := []int{10}
 	for _, row := range rows {
 		for _, ndv := range ndvs {
 			cas := defaultWindowTestCase()
@@ -522,6 +530,74 @@ func BenchmarkWindowRows(b *testing.B) {
 			b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
 				benchmarkWindowExecWithCase(b, cas)
 			})
+		}
+	}
+}
+
+func TestWindowAggFuncCount(t *testing.T) {
+	rows := []int{10}
+	ndvs := []int{3}
+	for _, row := range rows {
+		for _, ndv := range ndvs {
+			casTest := defaultWindowTestCase()
+			casTest.rows = row
+			casTest.ndv = ndv
+			casTest.windowFunc = ast.AggFuncSum // cheapest
+			cols := casTest.sumIntColumns()
+			dataSource := buildMockDataSource(mockDataSourceParameters{
+				schema: expression.NewSchema(cols...),
+				ndvs:   []int{0, casTest.ndv, 0, 0},
+				orders: []bool{false, true, false, false},
+				rows:   casTest.rows,
+				ctx:    casTest.ctx,
+				genDataFunc: func(row int, typ *types.FieldType) interface{} {
+					return int64(row)
+				},
+			})
+			if casTest.frame != nil {
+				switch casTest.frame.Type {
+				case ast.Rows:
+					col := cols[1]
+					casTest.frame.Start.CmpFuncs = make([]expression.CompareFunc, 1)
+					casTest.frame.Start.CmpFuncs[0] = expression.GetCmpFunction(col, col)
+					casTest.frame.End.CmpFuncs = make([]expression.CompareFunc, 1)
+					casTest.frame.End.CmpFuncs[0] = expression.GetCmpFunction(col, col)
+				}
+			}
+
+			childCols := casTest.columns()
+			schema := expression.NewSchema(childCols...)
+			windowExec := buildWindowExecutor(casTest.ctx, casTest.windowFunc, dataSource, schema, childCols[1:2], casTest.frame)
+			tmpCtx := context.Background()
+			chk := newFirstChunk(windowExec)
+			dataSource.prepareChunks()
+
+			for i := 0; i < len(dataSource.chunks); i++ {
+				for j := 0; j < dataSource.chunks[i].NumRows(); j++ {
+					fmt.Println(
+						dataSource.chunks[i].GetRow(j).GetInt64(0),
+						dataSource.chunks[i].GetRow(j).GetInt64(1),
+						dataSource.chunks[i].GetRow(j).GetInt64(2),
+						dataSource.chunks[i].GetRow(j).GetInt64(3),
+					)
+				}
+			}
+
+			if err := windowExec.Open(tmpCtx); err != nil {
+				t.Fatal(err)
+			}
+			for {
+				if err := windowExec.Next(tmpCtx, chk); err != nil {
+					t.Fatal(err)
+				}
+				if chk.NumRows() == 0 {
+					break
+				}
+			}
+
+			if err := windowExec.Close(); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 }

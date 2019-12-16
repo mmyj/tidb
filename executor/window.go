@@ -15,7 +15,7 @@ package executor
 
 import (
 	"context"
-
+	"fmt"
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -89,7 +89,8 @@ func (e *WindowExec) consumeOneGroup(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			if meetNewGroup {
-				return e.consumeGroupRows(groupRows)
+				err := e.consumeGroupRows(groupRows)
+				return err
 			}
 			groupRows = append(groupRows, inputRow)
 		}
@@ -113,6 +114,7 @@ func (e *WindowExec) consumeGroupRows(groupRows []chunk.Row) (err error) {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		fmt.Println(remained)
 		_, err = e.processor.appendResult2Chunk(e.ctx, groupRows, e.resultChunks[i], remained)
 		if err != nil {
 			return errors.Trace(err)
