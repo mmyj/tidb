@@ -2,6 +2,7 @@ package aggfuncs
 
 import (
 	"encoding/binary"
+	"fmt"
 	"unsafe"
 
 	"github.com/pingcap/errors"
@@ -65,18 +66,20 @@ type countOriginal4Real struct {
 func (e *countOriginal4Real) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
 	p := (*partialResult4Count)(pr)
 
+	fmt.Println("rowsInGroup 数据")
 	for _, row := range rowsInGroup {
-		_, isNull, err := e.args[0].EvalReal(sctx, row)
+		input, isNull, err := e.args[0].EvalReal(sctx, row)
 		if err != nil {
 			return err
 		}
 		if isNull {
 			continue
 		}
-
+		fmt.Print(input, " ")
 		*p++
 	}
 
+	fmt.Println("结果", *p)
 	return nil
 }
 

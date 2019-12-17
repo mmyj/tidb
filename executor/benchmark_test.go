@@ -152,9 +152,9 @@ func (mds *mockDataSource) Next(ctx context.Context, req *chunk.Chunk) error {
 func buildMockDataSource(opt mockDataSourceParameters) *mockDataSource {
 	baseExec := newBaseExecutor(opt.ctx, opt.schema, nil)
 	m := &mockDataSource{baseExec, opt, nil, nil, 0}
-	types := retTypes(m)
-	colData := make([][]interface{}, len(types))
-	for i := 0; i < len(types); i++ {
+	rtypes := retTypes(m)
+	colData := make([][]interface{}, len(rtypes))
+	for i := 0; i < len(rtypes); i++ {
 		colData[i] = m.genColDatums(i)
 	}
 
@@ -166,7 +166,7 @@ func buildMockDataSource(opt mockDataSourceParameters) *mockDataSource {
 	for i := 0; i < m.p.rows; i++ {
 		idx := i / m.maxChunkSize
 		retTypes := retTypes(m)
-		for colIdx := 0; colIdx < len(types); colIdx++ {
+		for colIdx := 0; colIdx < len(rtypes); colIdx++ {
 			switch retTypes[colIdx].Tp {
 			case mysql.TypeLong, mysql.TypeLonglong:
 				m.genData[idx].AppendInt64(colIdx, colData[colIdx][i].(int64))
@@ -174,6 +174,9 @@ func buildMockDataSource(opt mockDataSourceParameters) *mockDataSource {
 				m.genData[idx].AppendFloat64(colIdx, colData[colIdx][i].(float64))
 			case mysql.TypeVarString:
 				m.genData[idx].AppendString(colIdx, colData[colIdx][i].(string))
+			case mysql.TypeDecimal:
+				a := colData[colIdx][i]
+				m.genData[idx].AppendMyDecimal(colIdx, a.(*types.MyDecimal))
 			default:
 				panic("not implement")
 			}
@@ -446,12 +449,12 @@ func (a windowTestCase) columns() []*expression.Column {
 		{Index: 3, RetType: types.NewFieldType(mysql.TypeLonglong)},
 	}
 }
-func (a windowTestCase) sumIntColumns() []*expression.Column {
+func (a windowTestCase) sumFloat64Columns() []*expression.Column {
 	return []*expression.Column{
-		{Index: 0, RetType: types.NewFieldType(mysql.TypeLonglong)},
-		{Index: 1, RetType: types.NewFieldType(mysql.TypeLonglong)},
-		{Index: 2, RetType: types.NewFieldType(mysql.TypeLonglong)},
-		{Index: 3, RetType: types.NewFieldType(mysql.TypeLonglong)},
+		{Index: 0, RetType: types.NewFieldType(mysql.TypeDouble)},
+		{Index: 1, RetType: types.NewFieldType(mysql.TypeDouble)},
+		{Index: 2, RetType: types.NewFieldType(mysql.TypeDouble)},
+		{Index: 3, RetType: types.NewFieldType(mysql.TypeDouble)},
 	}
 }
 
@@ -476,16 +479,6 @@ func benchmarkWindowExecWithCase(b *testing.B, casTest *windowTestCase) {
 		rows:   casTest.rows,
 		ctx:    casTest.ctx,
 	})
-	if casTest.frame != nil {
-		switch casTest.frame.Type {
-		case ast.Rows:
-			col := cols[1]
-			casTest.frame.Start.CmpFuncs = make([]expression.CompareFunc, 1)
-			casTest.frame.Start.CmpFuncs[0] = expression.GetCmpFunction(col, col)
-			casTest.frame.End.CmpFuncs = make([]expression.CompareFunc, 1)
-			casTest.frame.End.CmpFuncs[0] = expression.GetCmpFunction(col, col)
-		}
-	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -542,22 +535,40 @@ func TestWindowAggFuncCount(t *testing.T) {
 			casTest := defaultWindowTestCase()
 			casTest.rows = row
 			casTest.ndv = ndv
-			casTest.windowFunc = ast.AggFuncSum // cheapest
-			cols := casTest.sumIntColumns()
+			//casTest.windowFunc = ast.AggFuncSum
+			casTest.windowFunc = ast.AggFuncCount
+			casTest.frame = &core.WindowFrame{
+				Type: ast.Rows,
+				Start: &core.FrameBound{
+					Type:      ast.Preceding,
+					UnBounded: false,
+					Num:       1,
+					CalcFuncs: nil,
+					CmpFuncs:  nil,
+				},
+				End: &core.FrameBound{
+					Type:      ast.Following,
+					UnBounded: false,
+					Num:       1,
+					CalcFuncs: nil,
+					CmpFuncs:  nil,
+				},
+			}
+			cols := casTest.sumFloat64Columns()
 			dataSource := buildMockDataSource(mockDataSourceParameters{
 				schema: expression.NewSchema(cols...),
-				ndvs:   []int{0, casTest.ndv, 0, 0},
-				orders: []bool{false, true, false, false},
+				ndvs:   []int{0, 0, 0, 0},
+				orders: []bool{true, false, false, false},
 				rows:   casTest.rows,
 				ctx:    casTest.ctx,
 				genDataFunc: func(row int, typ *types.FieldType) interface{} {
-					return int64(row)
+					return float64(2)
 				},
 			})
 			if casTest.frame != nil {
 				switch casTest.frame.Type {
 				case ast.Rows:
-					col := cols[1]
+					col := cols[0]
 					casTest.frame.Start.CmpFuncs = make([]expression.CompareFunc, 1)
 					casTest.frame.Start.CmpFuncs[0] = expression.GetCmpFunction(col, col)
 					casTest.frame.End.CmpFuncs = make([]expression.CompareFunc, 1)
@@ -565,20 +576,18 @@ func TestWindowAggFuncCount(t *testing.T) {
 				}
 			}
 
-			childCols := casTest.columns()
-			schema := expression.NewSchema(childCols...)
-			windowExec := buildWindowExecutor(casTest.ctx, casTest.windowFunc, dataSource, schema, childCols[1:2], casTest.frame)
+			windowExec := buildWindowExecutor(casTest.ctx, casTest.windowFunc, dataSource, dataSource.schema, cols[1:2], casTest.frame)
 			tmpCtx := context.Background()
 			chk := newFirstChunk(windowExec)
 			dataSource.prepareChunks()
-
+			fmt.Println("表数据")
 			for i := 0; i < len(dataSource.chunks); i++ {
 				for j := 0; j < dataSource.chunks[i].NumRows(); j++ {
 					fmt.Println(
-						dataSource.chunks[i].GetRow(j).GetInt64(0),
-						dataSource.chunks[i].GetRow(j).GetInt64(1),
-						dataSource.chunks[i].GetRow(j).GetInt64(2),
-						dataSource.chunks[i].GetRow(j).GetInt64(3),
+						dataSource.chunks[i].GetRow(j).GetFloat64(0),
+						dataSource.chunks[i].GetRow(j).GetFloat64(1),
+						dataSource.chunks[i].GetRow(j).GetFloat64(2),
+						dataSource.chunks[i].GetRow(j).GetFloat64(3),
 					)
 				}
 			}
@@ -594,7 +603,6 @@ func TestWindowAggFuncCount(t *testing.T) {
 					break
 				}
 			}
-
 			if err := windowExec.Close(); err != nil {
 				t.Fatal(err)
 			}

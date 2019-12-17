@@ -14,6 +14,7 @@
 package aggfuncs
 
 import (
+	"fmt"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -73,6 +74,7 @@ func (e *sum4Float64) AppendFinalResult2Chunk(sctx sessionctx.Context, pr Partia
 
 func (e *sum4Float64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
 	p := (*partialResult4SumFloat64)(pr)
+	fmt.Println("rowsInGroup 数据")
 	for _, row := range rowsInGroup {
 		input, isNull, err := e.args[0].EvalReal(sctx, row)
 		if err != nil {
@@ -81,6 +83,7 @@ func (e *sum4Float64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup [
 		if isNull {
 			continue
 		}
+		fmt.Print(input, " ")
 		if p.isNull {
 			p.val = input
 			p.isNull = false
@@ -88,6 +91,7 @@ func (e *sum4Float64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup [
 		}
 		p.val += input
 	}
+	fmt.Println("结果", p.val)
 	return nil
 }
 
