@@ -54,51 +54,53 @@ type countOriginal4Int struct {
 }
 
 func (e *countOriginal4Int) ImplementedSliceWindow() bool {
+	//return false
 	return true
 }
 
 func (e *countOriginal4Int) UpdatePartialResultBySliceWindow(sctx sessionctx.Context, groupRows []chunk.Row, start, end uint64, pr PartialResult) error {
-	//defer func() {
-	//	p := *(*partialResult4Count)(pr)
-	//	fmt.Println("范围", start,end, "结果", p)
-	//}()
+	defer func() {
+		p := *(*partialResult4Count)(pr)
+		fmt.Print(p, " ")
+	}()
+	p := (*partialResult4Count)(pr)
 	if !e.initialed {
 		err := e.UpdatePartialResult(sctx, groupRows[start:end], pr)
 		if err != nil {
 			return err
 		}
-		e.lastValue = *(*partialResult4Count)(pr)
+		e.lastValue = *p
 		e.lastStart = start
 		e.lastEnd = end
 		e.initialed = true
 		return nil
 	}
-	p := (*partialResult4Count)(pr)
-	*p = e.lastValue
-	var res partialResult4Count
 	if e.lastStart != start {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], PartialResult(&res))
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], pr)
 		if err != nil {
 			return err
 		}
-		*p -= res
-		e.lastValue = *p
+		e.lastValue -= *p
 		e.lastStart = start
 	}
-	res = 0
+	*p = 0
 	if e.lastEnd != end {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], PartialResult(&res))
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], pr)
 		if err != nil {
 			return err
 		}
-		*p += res
-		e.lastValue = *p
+		e.lastValue += *p
 		e.lastEnd = end
 	}
+	*p = e.lastValue
 	return nil
 }
 
 func (e *countOriginal4Int) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
+	//defer func() {
+	//	p := *(*partialResult4Count)(pr)
+	//	fmt.Print(p, " ")
+	//}()
 	p := (*partialResult4Count)(pr)
 
 	for _, row := range rowsInGroup {
@@ -129,39 +131,36 @@ func (e *countOriginal4Real) UpdatePartialResultBySliceWindow(sctx sessionctx.Co
 		p := *(*partialResult4Count)(pr)
 		fmt.Println("范围", start, end, "结果", p)
 	}()
+	p := (*partialResult4Count)(pr)
 	if !e.initialed {
 		err := e.UpdatePartialResult(sctx, groupRows[start:end], pr)
 		if err != nil {
 			return err
 		}
-		e.lastValue = *(*partialResult4Count)(pr)
+		e.lastValue = *p
 		e.lastStart = start
 		e.lastEnd = end
 		e.initialed = true
 		return nil
 	}
-	p := (*partialResult4Count)(pr)
-	*p = e.lastValue
-	var res partialResult4Count
 	if e.lastStart != start {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], PartialResult(&res))
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], pr)
 		if err != nil {
 			return err
 		}
-		*p -= res
-		e.lastValue = *p
+		e.lastValue -= *p
 		e.lastStart = start
 	}
-	res = 0
+	*p = 0
 	if e.lastEnd != end {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], PartialResult(&res))
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], pr)
 		if err != nil {
 			return err
 		}
-		*p += res
-		e.lastValue = *p
+		e.lastValue += *p
 		e.lastEnd = end
 	}
+	*p = e.lastValue
 	return nil
 }
 

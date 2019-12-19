@@ -449,12 +449,12 @@ func (a windowTestCase) columns() []*expression.Column {
 		{Index: 3, RetType: types.NewFieldType(mysql.TypeLonglong)},
 	}
 }
-func (a windowTestCase) sumFloat64Columns() []*expression.Column {
+func (a windowTestCase) sumInt64Columns() []*expression.Column {
 	return []*expression.Column{
-		{Index: 0, RetType: types.NewFieldType(mysql.TypeDouble)},
-		{Index: 1, RetType: types.NewFieldType(mysql.TypeDouble)},
-		{Index: 2, RetType: types.NewFieldType(mysql.TypeDouble)},
-		{Index: 3, RetType: types.NewFieldType(mysql.TypeDouble)},
+		{Index: 0, RetType: types.NewFieldType(mysql.TypeLonglong)},
+		{Index: 1, RetType: types.NewFieldType(mysql.TypeLonglong)},
+		{Index: 2, RetType: types.NewFieldType(mysql.TypeLonglong)},
+		{Index: 3, RetType: types.NewFieldType(mysql.TypeLonglong)},
 	}
 }
 
@@ -509,16 +509,6 @@ func benchmarkWindowExecWithCase(b *testing.B, casTest *windowTestCase) {
 				b.Fatal(b)
 			}
 			if chk.NumRows() == 0 {
-				fmt.Println("表数据")
-				r := chk.NumRows()
-				for j := 0; j < r; j++ {
-					fmt.Println(
-						chk.GetRow(j).GetInt64(0),
-						chk.GetRow(j).GetInt64(1),
-						chk.GetRow(j).GetInt64(2),
-						chk.GetRow(j).GetInt64(3),
-					)
-				}
 				break
 			}
 		}
@@ -548,8 +538,8 @@ func BenchmarkWindowRows(b *testing.B) {
 }
 
 func TestWindowAggFuncCount(t *testing.T) {
-	rows := []int{1000, 100000}
-	ndvs := []int{10, 1000}
+	rows := []int{20}
+	ndvs := []int{0}
 	for _, row := range rows {
 		for _, ndv := range ndvs {
 			casTest := defaultWindowTestCase()
@@ -574,7 +564,7 @@ func TestWindowAggFuncCount(t *testing.T) {
 					CmpFuncs:  nil,
 				},
 			}
-			cols := casTest.sumFloat64Columns()
+			cols := casTest.sumInt64Columns()
 			dataSource := buildMockDataSource(mockDataSourceParameters{
 				schema: expression.NewSchema(cols...),
 				ndvs:   []int{0, 0, 0, 0},
@@ -582,7 +572,7 @@ func TestWindowAggFuncCount(t *testing.T) {
 				rows:   casTest.rows,
 				ctx:    casTest.ctx,
 				genDataFunc: func(row int, typ *types.FieldType) interface{} {
-					return float64(2)
+					return int64(row % 3)
 				},
 			})
 			if casTest.frame != nil {
@@ -596,21 +586,22 @@ func TestWindowAggFuncCount(t *testing.T) {
 				}
 			}
 
-			windowExec := buildWindowExecutor(casTest.ctx, casTest.windowFunc, dataSource, dataSource.schema, cols[1:2], casTest.frame)
+			windowExec := buildWindowExecutor(casTest.ctx, casTest.windowFunc, dataSource, dataSource.schema, cols[0:1], casTest.frame)
 			tmpCtx := context.Background()
 			chk := newFirstChunk(windowExec)
 			dataSource.prepareChunks()
-			fmt.Println("表数据")
+			fmt.Println("=== 表数据")
 			for i := 0; i < len(dataSource.chunks); i++ {
 				for j := 0; j < dataSource.chunks[i].NumRows(); j++ {
 					fmt.Println(
-						dataSource.chunks[i].GetRow(j).GetFloat64(0),
-						dataSource.chunks[i].GetRow(j).GetFloat64(1),
-						dataSource.chunks[i].GetRow(j).GetFloat64(2),
-						dataSource.chunks[i].GetRow(j).GetFloat64(3),
+						dataSource.chunks[i].GetRow(j).GetInt64(0),
+						dataSource.chunks[i].GetRow(j).GetInt64(1),
+						dataSource.chunks[i].GetRow(j).GetInt64(2),
+						dataSource.chunks[i].GetRow(j).GetInt64(3),
 					)
 				}
 			}
+			fmt.Println("===")
 
 			if err := windowExec.Open(tmpCtx); err != nil {
 				t.Fatal(err)
