@@ -18,6 +18,11 @@ import (
 
 type baseCount struct {
 	baseAggFunc
+
+	lastStart uint64
+	lastEnd   uint64
+	lastValue partialResult4Count
+	initialed bool
 }
 
 type partialResult4Count = int64
@@ -37,8 +42,60 @@ func (e *baseCount) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialR
 	return nil
 }
 
+func (e *baseCount) ResetSliceWindow() {
+	e.lastStart = 0
+	e.lastEnd = 0
+	e.lastValue = 0
+	e.initialed = false
+}
+
 type countOriginal4Int struct {
 	baseCount
+}
+
+func (e *countOriginal4Int) ImplementedSliceWindow() bool {
+	return true
+}
+
+func (e *countOriginal4Int) UpdatePartialResultBySliceWindow(sctx sessionctx.Context, groupRows []chunk.Row, start, end uint64, pr PartialResult) error {
+	//defer func() {
+	//	p := *(*partialResult4Count)(pr)
+	//	fmt.Println("范围", start,end, "结果", p)
+	//}()
+	if !e.initialed {
+		err := e.UpdatePartialResult(sctx, groupRows[start:end], pr)
+		if err != nil {
+			return err
+		}
+		e.lastValue = *(*partialResult4Count)(pr)
+		e.lastStart = start
+		e.lastEnd = end
+		e.initialed = true
+		return nil
+	}
+	p := (*partialResult4Count)(pr)
+	*p = e.lastValue
+	var res partialResult4Count
+	if e.lastStart != start {
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], PartialResult(&res))
+		if err != nil {
+			return err
+		}
+		*p -= res
+		e.lastValue = *p
+		e.lastStart = start
+	}
+	res = 0
+	if e.lastEnd != end {
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], PartialResult(&res))
+		if err != nil {
+			return err
+		}
+		*p += res
+		e.lastValue = *p
+		e.lastEnd = end
+	}
+	return nil
 }
 
 func (e *countOriginal4Int) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
@@ -63,28 +120,115 @@ type countOriginal4Real struct {
 	baseCount
 }
 
+func (e *countOriginal4Real) ImplementedSliceWindow() bool {
+	return true
+}
+
+func (e *countOriginal4Real) UpdatePartialResultBySliceWindow(sctx sessionctx.Context, groupRows []chunk.Row, start, end uint64, pr PartialResult) error {
+	defer func() {
+		p := *(*partialResult4Count)(pr)
+		fmt.Println("范围", start, end, "结果", p)
+	}()
+	if !e.initialed {
+		err := e.UpdatePartialResult(sctx, groupRows[start:end], pr)
+		if err != nil {
+			return err
+		}
+		e.lastValue = *(*partialResult4Count)(pr)
+		e.lastStart = start
+		e.lastEnd = end
+		e.initialed = true
+		return nil
+	}
+	p := (*partialResult4Count)(pr)
+	*p = e.lastValue
+	var res partialResult4Count
+	if e.lastStart != start {
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], PartialResult(&res))
+		if err != nil {
+			return err
+		}
+		*p -= res
+		e.lastValue = *p
+		e.lastStart = start
+	}
+	res = 0
+	if e.lastEnd != end {
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], PartialResult(&res))
+		if err != nil {
+			return err
+		}
+		*p += res
+		e.lastValue = *p
+		e.lastEnd = end
+	}
+	return nil
+}
+
 func (e *countOriginal4Real) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
 	p := (*partialResult4Count)(pr)
 
-	fmt.Println("rowsInGroup 数据")
 	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalReal(sctx, row)
+		_, isNull, err := e.args[0].EvalReal(sctx, row)
 		if err != nil {
 			return err
 		}
 		if isNull {
 			continue
 		}
-		fmt.Print(input, " ")
 		*p++
 	}
 
-	fmt.Println("结果", *p)
 	return nil
 }
 
 type countOriginal4Decimal struct {
 	baseCount
+}
+
+func (e *countOriginal4Decimal) ImplementedSliceWindow() bool {
+	return true
+}
+
+func (e *countOriginal4Decimal) UpdatePartialResultBySliceWindow(sctx sessionctx.Context, groupRows []chunk.Row, start, end uint64, pr PartialResult) error {
+	defer func() {
+		p := *(*partialResult4Count)(pr)
+		fmt.Println("范围", start, end, "结果", p)
+	}()
+	if !e.initialed {
+		err := e.UpdatePartialResult(sctx, groupRows[start:end], pr)
+		if err != nil {
+			return err
+		}
+		e.lastValue = *(*partialResult4Count)(pr)
+		e.lastStart = start
+		e.lastEnd = end
+		e.initialed = true
+		return nil
+	}
+	p := (*partialResult4Count)(pr)
+	*p = e.lastValue
+	var res partialResult4Count
+	if e.lastStart != start {
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], PartialResult(&res))
+		if err != nil {
+			return err
+		}
+		*p -= res
+		e.lastValue = *p
+		e.lastStart = start
+	}
+	res = 0
+	if e.lastEnd != end {
+		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], PartialResult(&res))
+		if err != nil {
+			return err
+		}
+		*p += res
+		e.lastValue = *p
+		e.lastEnd = end
+	}
+	return nil
 }
 
 func (e *countOriginal4Decimal) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {

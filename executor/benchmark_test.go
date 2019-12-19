@@ -479,6 +479,16 @@ func benchmarkWindowExecWithCase(b *testing.B, casTest *windowTestCase) {
 		rows:   casTest.rows,
 		ctx:    casTest.ctx,
 	})
+	if casTest.frame != nil {
+		switch casTest.frame.Type {
+		case ast.Rows:
+			col := cols[1]
+			casTest.frame.Start.CmpFuncs = make([]expression.CompareFunc, 1)
+			casTest.frame.Start.CmpFuncs[0] = expression.GetCmpFunction(col, col)
+			casTest.frame.End.CmpFuncs = make([]expression.CompareFunc, 1)
+			casTest.frame.End.CmpFuncs[0] = expression.GetCmpFunction(col, col)
+		}
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -499,6 +509,16 @@ func benchmarkWindowExecWithCase(b *testing.B, casTest *windowTestCase) {
 				b.Fatal(b)
 			}
 			if chk.NumRows() == 0 {
+				fmt.Println("表数据")
+				r := chk.NumRows()
+				for j := 0; j < r; j++ {
+					fmt.Println(
+						chk.GetRow(j).GetInt64(0),
+						chk.GetRow(j).GetInt64(1),
+						chk.GetRow(j).GetInt64(2),
+						chk.GetRow(j).GetInt64(3),
+					)
+				}
 				break
 			}
 		}
@@ -528,8 +548,8 @@ func BenchmarkWindowRows(b *testing.B) {
 }
 
 func TestWindowAggFuncCount(t *testing.T) {
-	rows := []int{10}
-	ndvs := []int{3}
+	rows := []int{1000, 100000}
+	ndvs := []int{10, 1000}
 	for _, row := range rows {
 		for _, ndv := range ndvs {
 			casTest := defaultWindowTestCase()
@@ -542,14 +562,14 @@ func TestWindowAggFuncCount(t *testing.T) {
 				Start: &core.FrameBound{
 					Type:      ast.Preceding,
 					UnBounded: false,
-					Num:       1,
+					Num:       2,
 					CalcFuncs: nil,
 					CmpFuncs:  nil,
 				},
 				End: &core.FrameBound{
 					Type:      ast.Following,
 					UnBounded: false,
-					Num:       1,
+					Num:       2,
 					CalcFuncs: nil,
 					CmpFuncs:  nil,
 				},
@@ -612,8 +632,8 @@ func TestWindowAggFuncCount(t *testing.T) {
 
 func BenchmarkWindowAggFuncCount(b *testing.B) {
 	b.ReportAllocs()
-	rows := []int{1000, 100000}
-	ndvs := []int{10, 1000}
+	rows := []int{100000}
+	ndvs := []int{100}
 	for _, row := range rows {
 		for _, ndv := range ndvs {
 			cas := defaultWindowTestCase()
@@ -623,16 +643,16 @@ func BenchmarkWindowAggFuncCount(b *testing.B) {
 			cas.frame = &core.WindowFrame{
 				Type: ast.Rows,
 				Start: &core.FrameBound{
-					Type:      ast.CurrentRow,
+					Type:      ast.Preceding,
 					UnBounded: false,
-					Num:       1,
+					Num:       100,
 					CalcFuncs: nil,
 					CmpFuncs:  nil,
 				},
 				End: &core.FrameBound{
-					Type:      ast.CurrentRow,
+					Type:      ast.Following,
 					UnBounded: false,
-					Num:       1,
+					Num:       100,
 					CalcFuncs: nil,
 					CmpFuncs:  nil,
 				},

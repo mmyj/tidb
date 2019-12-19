@@ -273,6 +273,7 @@ func (p *rowFrameWindowProcessor) consumeGroupRows(ctx sessionctx.Context, rows 
 // TODO: We can optimize it using sliding window algorithm.
 func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, rows []chunk.Row, chk *chunk.Chunk, remained int) ([]chunk.Row, error) {
 	numRows := uint64(len(rows))
+	var err error
 	for remained > 0 {
 		start := p.getStartOffset(numRows)
 		end := p.getEndOffset(numRows)
@@ -280,7 +281,7 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 		remained--
 		if start >= end {
 			for i, windowFunc := range p.windowFuncs {
-				err := windowFunc.AppendFinalResult2Chunk(ctx, p.partialResults[i], chk)
+				err = windowFunc.AppendFinalResult2Chunk(ctx, p.partialResults[i], chk)
 				if err != nil {
 					return nil, err
 				}
@@ -288,7 +289,11 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 			continue
 		}
 		for i, windowFunc := range p.windowFuncs {
-			err := windowFunc.UpdatePartialResult(ctx, rows[start:end], p.partialResults[i])
+			if windowFunc.ImplementedSliceWindow() {
+				err = windowFunc.UpdatePartialResultBySliceWindow(ctx, rows, start, end, p.partialResults[i])
+			} else {
+				err = windowFunc.UpdatePartialResult(ctx, rows[start:end], p.partialResults[i])
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -304,6 +309,9 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 
 func (p *rowFrameWindowProcessor) resetPartialResult() {
 	p.curRowIdx = 0
+	for _, windowFunc := range p.windowFuncs {
+		windowFunc.ResetSliceWindow()
+	}
 }
 
 type rangeFrameWindowProcessor struct {

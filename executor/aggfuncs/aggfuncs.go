@@ -112,7 +112,8 @@ type AggFunc interface {
 	UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error
 
 	ImplementedSliceWindow() bool
-	UpdatePartialResultBySliceWindow(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error
+	ResetSliceWindow()
+	UpdatePartialResultBySliceWindow(sctx sessionctx.Context, groupRows []chunk.Row, start, end uint64, pr PartialResult) error
 
 	// MergePartialResult will be called in the final phase when parallelly
 	// executing. It converts the PartialResult `src`, `dst` to the same specific
@@ -146,6 +147,9 @@ func (*baseAggFunc) ImplementedSliceWindow() bool {
 	return false
 }
 
-func (*baseAggFunc) UpdatePartialResultBySliceWindow(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
+func (*baseAggFunc) ResetSliceWindow() {
+}
+
+func (*baseAggFunc) UpdatePartialResultBySliceWindow(sctx sessionctx.Context, groupRows []chunk.Row, start, end uint64, pr PartialResult) error {
 	return nil
 }

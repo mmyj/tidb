@@ -101,29 +101,29 @@ func buildCount(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 	// use countOriginalWithDistinct.
 	if aggFuncDesc.HasDistinct &&
 		(aggFuncDesc.Mode == aggregation.CompleteMode || aggFuncDesc.Mode == aggregation.Partial1Mode) {
-		return &countOriginalWithDistinct{baseCount{base}}
+		return &countOriginalWithDistinct{baseCount{baseAggFunc: base}}
 	}
 
 	switch aggFuncDesc.Mode {
 	case aggregation.CompleteMode, aggregation.Partial1Mode:
 		switch aggFuncDesc.Args[0].GetType().EvalType() {
 		case types.ETInt:
-			return &countOriginal4Int{baseCount{base}}
+			return &countOriginal4Int{baseCount{baseAggFunc: base}}
 		case types.ETReal:
-			return &countOriginal4Real{baseCount{base}}
+			return &countOriginal4Real{baseCount{baseAggFunc: base}}
 		case types.ETDecimal:
-			return &countOriginal4Decimal{baseCount{base}}
+			return &countOriginal4Decimal{baseCount{baseAggFunc: base}}
 		case types.ETTimestamp, types.ETDatetime:
-			return &countOriginal4Time{baseCount{base}}
+			return &countOriginal4Time{baseCount{baseAggFunc: base}}
 		case types.ETDuration:
-			return &countOriginal4Duration{baseCount{base}}
+			return &countOriginal4Duration{baseCount{baseAggFunc: base}}
 		case types.ETJson:
-			return &countOriginal4JSON{baseCount{base}}
+			return &countOriginal4JSON{baseCount{baseAggFunc: base}}
 		case types.ETString:
-			return &countOriginal4String{baseCount{base}}
+			return &countOriginal4String{baseCount{baseAggFunc: base}}
 		}
 	case aggregation.Partial2Mode, aggregation.FinalMode:
-		return &countPartial{baseCount{base}}
+		return &countPartial{baseCount{baseAggFunc: base}}
 	}
 
 	return nil
