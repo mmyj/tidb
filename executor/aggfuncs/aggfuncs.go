@@ -137,6 +137,11 @@ type baseAggFunc struct {
 	// ordinal stores the ordinal of the columns in the output chunk, which is
 	// used to append the final result of this function.
 	ordinal int
+
+	sliceWindowLastStartOffset   uint64
+	sliceWindowLastEndOffset     uint64
+	sliceWindowLastPartialResult partialResult4Count
+	sliceWindowInitialed         bool
 }
 
 func (*baseAggFunc) MergePartialResult(sctx sessionctx.Context, src, dst PartialResult) error {

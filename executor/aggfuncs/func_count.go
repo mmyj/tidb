@@ -18,11 +18,7 @@ import (
 
 type baseCount struct {
 	baseAggFunc
-
-	lastStart uint64
-	lastEnd   uint64
-	lastValue partialResult4Count
-	initialed bool
+	sliceWindowData []bool
 }
 
 type partialResult4Count = int64
@@ -43,10 +39,27 @@ func (e *baseCount) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialR
 }
 
 func (e *baseCount) ResetSliceWindow() {
-	e.lastStart = 0
-	e.lastEnd = 0
-	e.lastValue = 0
-	e.initialed = false
+	e.sliceWindowLastStartOffset = 0
+	e.sliceWindowLastEndOffset = 0
+	e.sliceWindowLastPartialResult = 0
+	e.sliceWindowInitialed = false
+}
+
+func (e *baseCount) updateSliceWindow(sctx sessionctx.Context, groupRows []chunk.Row, start, end uint64, pr PartialResult) error {
+	p := (*partialResult4Count)(pr)
+	for i := start; i < end; i++ {
+		_, isNull, err := e.args[0].EvalInt(sctx, groupRows[i])
+		if err != nil {
+			return err
+		}
+		if isNull {
+			e.sliceWindowData[i] = false
+			continue
+		}
+		e.sliceWindowData[i] = true
+		*p++
+	}
+	return nil
 }
 
 type countOriginal4Int struct {
@@ -54,45 +67,45 @@ type countOriginal4Int struct {
 }
 
 func (e *countOriginal4Int) ImplementedSliceWindow() bool {
-	//return false
-	return true
+	return false
+	//return true
 }
 
 func (e *countOriginal4Int) UpdatePartialResultBySliceWindow(sctx sessionctx.Context, groupRows []chunk.Row, start, end uint64, pr PartialResult) error {
-	defer func() {
-		p := *(*partialResult4Count)(pr)
-		fmt.Print(p, " ")
-	}()
 	p := (*partialResult4Count)(pr)
-	if !e.initialed {
-		err := e.UpdatePartialResult(sctx, groupRows[start:end], pr)
+	if !e.sliceWindowInitialed {
+		if len(e.sliceWindowData) < len(groupRows) {
+			e.sliceWindowData = make([]bool, len(groupRows))
+		}
+		err := e.baseCount.updateSliceWindow(sctx, groupRows, start, end, pr)
 		if err != nil {
 			return err
 		}
-		e.lastValue = *p
-		e.lastStart = start
-		e.lastEnd = end
-		e.initialed = true
+		e.sliceWindowLastPartialResult = *p
+		e.sliceWindowLastStartOffset = start
+		e.sliceWindowLastEndOffset = end
+		e.sliceWindowInitialed = true
 		return nil
 	}
-	if e.lastStart != start {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], pr)
-		if err != nil {
-			return err
+	if e.sliceWindowLastStartOffset != start {
+		for i := e.sliceWindowLastStartOffset; i < start; i++ {
+			if e.sliceWindowData[i] {
+				*p++
+			}
 		}
-		e.lastValue -= *p
-		e.lastStart = start
+		e.sliceWindowLastPartialResult -= *p
+		e.sliceWindowLastStartOffset = start
 	}
 	*p = 0
-	if e.lastEnd != end {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], pr)
+	if e.sliceWindowLastEndOffset != end {
+		err := e.baseCount.updateSliceWindow(sctx, groupRows, e.sliceWindowLastEndOffset, end, pr)
 		if err != nil {
 			return err
 		}
-		e.lastValue += *p
-		e.lastEnd = end
+		e.sliceWindowLastPartialResult += *p
+		e.sliceWindowLastEndOffset = end
 	}
-	*p = e.lastValue
+	*p = e.sliceWindowLastPartialResult
 	return nil
 }
 
@@ -132,35 +145,35 @@ func (e *countOriginal4Real) UpdatePartialResultBySliceWindow(sctx sessionctx.Co
 		fmt.Println("范围", start, end, "结果", p)
 	}()
 	p := (*partialResult4Count)(pr)
-	if !e.initialed {
+	if !e.sliceWindowInitialed {
 		err := e.UpdatePartialResult(sctx, groupRows[start:end], pr)
 		if err != nil {
 			return err
 		}
-		e.lastValue = *p
-		e.lastStart = start
-		e.lastEnd = end
-		e.initialed = true
+		e.sliceWindowLastPartialResult = *p
+		e.sliceWindowLastStartOffset = start
+		e.sliceWindowLastEndOffset = end
+		e.sliceWindowInitialed = true
 		return nil
 	}
-	if e.lastStart != start {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], pr)
+	if e.sliceWindowLastStartOffset != start {
+		err := e.UpdatePartialResult(sctx, groupRows[e.sliceWindowLastStartOffset:start], pr)
 		if err != nil {
 			return err
 		}
-		e.lastValue -= *p
-		e.lastStart = start
+		e.sliceWindowLastPartialResult -= *p
+		e.sliceWindowLastStartOffset = start
 	}
 	*p = 0
-	if e.lastEnd != end {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], pr)
+	if e.sliceWindowLastEndOffset != end {
+		err := e.UpdatePartialResult(sctx, groupRows[e.sliceWindowLastEndOffset:end], pr)
 		if err != nil {
 			return err
 		}
-		e.lastValue += *p
-		e.lastEnd = end
+		e.sliceWindowLastPartialResult += *p
+		e.sliceWindowLastEndOffset = end
 	}
-	*p = e.lastValue
+	*p = e.sliceWindowLastPartialResult
 	return nil
 }
 
@@ -194,38 +207,38 @@ func (e *countOriginal4Decimal) UpdatePartialResultBySliceWindow(sctx sessionctx
 		p := *(*partialResult4Count)(pr)
 		fmt.Println("范围", start, end, "结果", p)
 	}()
-	if !e.initialed {
+	if !e.sliceWindowInitialed {
 		err := e.UpdatePartialResult(sctx, groupRows[start:end], pr)
 		if err != nil {
 			return err
 		}
-		e.lastValue = *(*partialResult4Count)(pr)
-		e.lastStart = start
-		e.lastEnd = end
-		e.initialed = true
+		e.sliceWindowLastPartialResult = *(*partialResult4Count)(pr)
+		e.sliceWindowLastStartOffset = start
+		e.sliceWindowLastEndOffset = end
+		e.sliceWindowInitialed = true
 		return nil
 	}
 	p := (*partialResult4Count)(pr)
-	*p = e.lastValue
+	*p = e.sliceWindowLastPartialResult
 	var res partialResult4Count
-	if e.lastStart != start {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastStart:start], PartialResult(&res))
+	if e.sliceWindowLastStartOffset != start {
+		err := e.UpdatePartialResult(sctx, groupRows[e.sliceWindowLastStartOffset:start], PartialResult(&res))
 		if err != nil {
 			return err
 		}
 		*p -= res
-		e.lastValue = *p
-		e.lastStart = start
+		e.sliceWindowLastPartialResult = *p
+		e.sliceWindowLastStartOffset = start
 	}
 	res = 0
-	if e.lastEnd != end {
-		err := e.UpdatePartialResult(sctx, groupRows[e.lastEnd:end], PartialResult(&res))
+	if e.sliceWindowLastEndOffset != end {
+		err := e.UpdatePartialResult(sctx, groupRows[e.sliceWindowLastEndOffset:end], PartialResult(&res))
 		if err != nil {
 			return err
 		}
 		*p += res
-		e.lastValue = *p
-		e.lastEnd = end
+		e.sliceWindowLastPartialResult = *p
+		e.sliceWindowLastEndOffset = end
 	}
 	return nil
 }

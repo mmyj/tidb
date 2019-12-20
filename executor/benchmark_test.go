@@ -538,7 +538,7 @@ func BenchmarkWindowRows(b *testing.B) {
 }
 
 func TestWindowAggFuncCount(t *testing.T) {
-	rows := []int{20}
+	rows := []int{2000}
 	ndvs := []int{0}
 	for _, row := range rows {
 		for _, ndv := range ndvs {
