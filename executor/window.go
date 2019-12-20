@@ -15,6 +15,7 @@ package executor
 
 import (
 	"context"
+
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -213,11 +214,12 @@ func (p *aggWindowProcessor) resetPartialResult() {
 }
 
 type rowFrameWindowProcessor struct {
-	windowFuncs    []aggfuncs.AggFunc
-	partialResults []aggfuncs.PartialResult
-	start          *core.FrameBound
-	end            *core.FrameBound
-	curRowIdx      uint64
+	windowFuncs         []aggfuncs.AggFunc
+	partialResults      []aggfuncs.PartialResult
+	slicePartialResults []aggfuncs.PartialResult
+	start               *core.FrameBound
+	end                 *core.FrameBound
+	curRowIdx           uint64
 }
 
 func (p *rowFrameWindowProcessor) getStartOffset(numRows uint64) uint64 {
@@ -273,7 +275,13 @@ func (p *rowFrameWindowProcessor) consumeGroupRows(ctx sessionctx.Context, rows 
 // TODO: We can optimize it using sliding window algorithm.
 func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, rows []chunk.Row, chk *chunk.Chunk, remained int) ([]chunk.Row, error) {
 	numRows := uint64(len(rows))
-	var err error
+	var (
+		err        error
+		lastStart  uint64
+		lastEnd    uint64
+		shiftStart uint64
+		shiftEnd   uint64
+	)
 	for remained > 0 {
 		start := p.getStartOffset(numRows)
 		end := p.getEndOffset(numRows)
@@ -288,12 +296,22 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 			}
 			continue
 		}
+		shiftStart = start - lastStart
+		shiftEnd = end - lastEnd
 		for i, windowFunc := range p.windowFuncs {
-			if windowFunc.ImplementedSliceWindow() {
-				err = windowFunc.UpdatePartialResultBySliceWindow(ctx, rows, start, end, p.partialResults[i])
-			} else {
-				err = windowFunc.UpdatePartialResult(ctx, rows[start:end], p.partialResults[i])
+			if slidingWindowAggFunc, ok := windowFunc.(aggfuncs.SlidingWindowAggFunc); ok {
+				err = slidingWindowAggFunc.Slide(ctx, rows, lastStart, lastEnd, shiftStart, shiftEnd, p.partialResults[i])
+				if err != nil {
+					return nil, err
+				}
+				err = windowFunc.AppendFinalResult2Chunk(ctx, p.partialResults[i], chk)
+				if err != nil {
+					return nil, err
+				}
+				continue
 			}
+
+			err = windowFunc.UpdatePartialResult(ctx, rows[start:end], p.partialResults[i])
 			if err != nil {
 				return nil, err
 			}
@@ -303,15 +321,19 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 			}
 			windowFunc.ResetPartialResult(p.partialResults[i])
 		}
+		lastStart = start
+		lastEnd = end
+	}
+	for i, windowFunc := range p.windowFuncs {
+		if _, ok := windowFunc.(aggfuncs.SlidingWindowAggFunc); ok {
+			windowFunc.ResetPartialResult(p.partialResults[i])
+		}
 	}
 	return rows, nil
 }
 
 func (p *rowFrameWindowProcessor) resetPartialResult() {
 	p.curRowIdx = 0
-	for _, windowFunc := range p.windowFuncs {
-		windowFunc.ResetSliceWindow()
-	}
 }
 
 type rangeFrameWindowProcessor struct {

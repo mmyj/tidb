@@ -2343,6 +2343,7 @@ func (b *executorBuilder) buildWindow(v *plannercore.PhysicalWindow) *WindowExec
 	}
 	windowFuncs := make([]aggfuncs.AggFunc, 0, len(v.WindowFuncDescs))
 	partialResults := make([]aggfuncs.PartialResult, 0, len(v.WindowFuncDescs))
+	slicePartialResults := make([]aggfuncs.PartialResult, 0, len(v.WindowFuncDescs))
 	schema := v.Schema()
 	resultColIdx := schema.Len() - len(v.WindowFuncDescs)
 	for _, desc := range v.WindowFuncDescs {
@@ -2354,6 +2355,7 @@ func (b *executorBuilder) buildWindow(v *plannercore.PhysicalWindow) *WindowExec
 		agg := aggfuncs.BuildWindowFunctions(b.ctx, aggDesc, resultColIdx, orderByCols)
 		windowFuncs = append(windowFuncs, agg)
 		partialResults = append(partialResults, agg.AllocPartialResult())
+		slicePartialResults = append(slicePartialResults, agg.AllocPartialResult())
 		resultColIdx++
 	}
 	var processor windowProcessor
@@ -2364,10 +2366,11 @@ func (b *executorBuilder) buildWindow(v *plannercore.PhysicalWindow) *WindowExec
 		}
 	} else if v.Frame.Type == ast.Rows {
 		processor = &rowFrameWindowProcessor{
-			windowFuncs:    windowFuncs,
-			partialResults: partialResults,
-			start:          v.Frame.Start,
-			end:            v.Frame.End,
+			windowFuncs:         windowFuncs,
+			partialResults:      partialResults,
+			slicePartialResults: slicePartialResults,
+			start:               v.Frame.Start,
+			end:                 v.Frame.End,
 		}
 	} else {
 		cmpResult := int64(-1)
