@@ -2,6 +2,7 @@ package aggfuncs
 
 import (
 	"encoding/binary"
+	"fmt"
 	"unsafe"
 
 	"github.com/pingcap/errors"
@@ -41,10 +42,10 @@ type countOriginal4Int struct {
 }
 
 func (e *countOriginal4Int) Slide(sctx sessionctx.Context, rows []chunk.Row, lastStart, lastEnd uint64, shiftStart, shiftEnd uint64, pr PartialResult) error {
-	//defer func() {
-	//	p := *(*partialResult4Count)(pr)
-	//	fmt.Println("lastStart, lastEnd", lastStart, lastEnd, "shiftStart, shiftEnd", shiftStart, shiftEnd, "p", p)
-	//}()
+	defer func() {
+		p := *(*partialResult4Count)(pr)
+		fmt.Printf("[%d, %d) -> [%d, %d) result %d", lastStart, lastEnd, lastStart+shiftStart, lastEnd+shiftEnd, p)
+	}()
 	p := (*partialResult4Count)(pr)
 	for i := uint64(0); i < shiftStart; i++ {
 		_, isNull, err := e.args[0].EvalInt(sctx, rows[lastStart+i])
@@ -70,10 +71,11 @@ func (e *countOriginal4Int) Slide(sctx sessionctx.Context, rows []chunk.Row, las
 }
 
 func (e *countOriginal4Int) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	//defer func() {
-	//	p := *(*partialResult4Count)(pr)
-	//	fmt.Print(p, " ")
-	//}()
+	defer func() {
+		p := *(*partialResult4Count)(pr)
+		fmt.Printf("result %d", p)
+
+	}()
 	p := (*partialResult4Count)(pr)
 
 	for _, row := range rowsInGroup {

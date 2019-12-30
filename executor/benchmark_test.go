@@ -538,7 +538,7 @@ func BenchmarkWindowRows(b *testing.B) {
 }
 
 func TestWindowAggFuncCount(t *testing.T) {
-	rows := []int{2000}
+	rows := []int{50}
 	ndvs := []int{0}
 	for _, row := range rows {
 		for _, ndv := range ndvs {
@@ -550,16 +550,16 @@ func TestWindowAggFuncCount(t *testing.T) {
 			casTest.frame = &core.WindowFrame{
 				Type: ast.Rows,
 				Start: &core.FrameBound{
-					Type:      ast.Preceding,
+					Type:      ast.Following,
 					UnBounded: false,
-					Num:       2,
+					Num:       3,
 					CalcFuncs: nil,
 					CmpFuncs:  nil,
 				},
 				End: &core.FrameBound{
 					Type:      ast.Following,
 					UnBounded: false,
-					Num:       2,
+					Num:       10,
 					CalcFuncs: nil,
 					CmpFuncs:  nil,
 				},
@@ -594,10 +594,13 @@ func TestWindowAggFuncCount(t *testing.T) {
 			for i := 0; i < len(dataSource.chunks); i++ {
 				for j := 0; j < dataSource.chunks[i].NumRows(); j++ {
 					fmt.Println(
+						j,
+						"[",
 						dataSource.chunks[i].GetRow(j).GetInt64(0),
 						dataSource.chunks[i].GetRow(j).GetInt64(1),
 						dataSource.chunks[i].GetRow(j).GetInt64(2),
 						dataSource.chunks[i].GetRow(j).GetInt64(3),
+						"]",
 					)
 				}
 			}

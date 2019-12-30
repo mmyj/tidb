@@ -15,7 +15,7 @@ package executor
 
 import (
 	"context"
-
+	"fmt"
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -276,15 +276,18 @@ func (p *rowFrameWindowProcessor) consumeGroupRows(ctx sessionctx.Context, rows 
 func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, rows []chunk.Row, chk *chunk.Chunk, remained int) ([]chunk.Row, error) {
 	numRows := uint64(len(rows))
 	var (
-		err        error
-		lastStart  uint64
-		lastEnd    uint64
-		shiftStart uint64
-		shiftEnd   uint64
+		err                      error
+		initializedSlidingWindow bool
+		lastStart                uint64
+		lastEnd                  uint64
+		shiftStart               uint64
+		shiftEnd                 uint64
 	)
 	for remained > 0 {
 		start := p.getStartOffset(numRows)
 		end := p.getEndOffset(numRows)
+		fmt.Printf("\n")
+		fmt.Printf("当前行%d 帧区间[%d, %d) ", p.curRowIdx, start, end)
 		p.curRowIdx++
 		remained--
 		if start >= end {
@@ -296,22 +299,17 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 			}
 			continue
 		}
+
 		shiftStart = start - lastStart
 		shiftEnd = end - lastEnd
 		for i, windowFunc := range p.windowFuncs {
-			if slidingWindowAggFunc, ok := windowFunc.(aggfuncs.SlidingWindowAggFunc); ok {
+			slidingWindowAggFunc, ok := windowFunc.(aggfuncs.SlidingWindowAggFunc)
+			if ok && initializedSlidingWindow {
 				err = slidingWindowAggFunc.Slide(ctx, rows, lastStart, lastEnd, shiftStart, shiftEnd, p.partialResults[i])
-				if err != nil {
-					return nil, err
-				}
-				err = windowFunc.AppendFinalResult2Chunk(ctx, p.partialResults[i], chk)
-				if err != nil {
-					return nil, err
-				}
-				continue
+			} else {
+				err = windowFunc.UpdatePartialResult(ctx, rows[start:end], p.partialResults[i])
+				initializedSlidingWindow = true
 			}
-
-			err = windowFunc.UpdatePartialResult(ctx, rows[start:end], p.partialResults[i])
 			if err != nil {
 				return nil, err
 			}
@@ -319,15 +317,15 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 			if err != nil {
 				return nil, err
 			}
-			windowFunc.ResetPartialResult(p.partialResults[i])
+			if !ok {
+				windowFunc.ResetPartialResult(p.partialResults[i])
+			}
 		}
 		lastStart = start
 		lastEnd = end
 	}
 	for i, windowFunc := range p.windowFuncs {
-		if _, ok := windowFunc.(aggfuncs.SlidingWindowAggFunc); ok {
-			windowFunc.ResetPartialResult(p.partialResults[i])
-		}
+		windowFunc.ResetPartialResult(p.partialResults[i])
 	}
 	return rows, nil
 }
