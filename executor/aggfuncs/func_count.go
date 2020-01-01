@@ -105,6 +105,10 @@ func (e *countOriginal4Real) UpdatePartialResult(sctx sessionctx.Context, rowsIn
 	return nil
 }
 
+func (e *countOriginal4Real) ImplementedSlide() bool {
+	return true
+}
+
 func (e *countOriginal4Real) Slide(sctx sessionctx.Context, rows []chunk.Row, lastStart, lastEnd uint64, shiftStart, shiftEnd uint64, pr PartialResult) error {
 	p := (*partialResult4Count)(pr)
 	for i := uint64(0); i < shiftStart; i++ {

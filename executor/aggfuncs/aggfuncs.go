@@ -123,6 +123,9 @@ type AggFunc interface {
 	// partial result and then calculates the final result and append that
 	// final result to the chunk provided.
 	AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error
+
+	ImplementedSlide() bool
+	Slide(sctx sessionctx.Context, rows []chunk.Row, lastStart, lastEnd uint64, shiftStart, shiftEnd uint64, pr PartialResult) error
 }
 
 type baseAggFunc struct {
@@ -139,6 +142,14 @@ func (*baseAggFunc) MergePartialResult(sctx sessionctx.Context, src, dst Partial
 	return nil
 }
 
+func (*baseAggFunc) ImplementedSlide() bool {
+	return false
+}
+
+func (*baseAggFunc) Slide(sctx sessionctx.Context, rows []chunk.Row, lastStart, lastEnd uint64, shiftStart, shiftEnd uint64, pr PartialResult) error {
+	return nil
+}
+
 // SlidingWindowAggFunc is the interface to evaluate the aggregate functions using sliding window.
 type SlidingWindowAggFunc interface {
 	// Slide evaluates the aggregate functions using a sliding window. The input
@@ -147,5 +158,4 @@ type SlidingWindowAggFunc interface {
 	// PartialResult stores the intermediate result which will be used in the next
 	// sliding window, ensure call ResetPartialResult after a frame are evaluated
 	// completely.
-	Slide(sctx sessionctx.Context, rows []chunk.Row, lastStart, lastEnd uint64, shiftStart, shiftEnd uint64, pr PartialResult) error
 }

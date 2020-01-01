@@ -317,9 +317,8 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 		shiftStart = start - lastStart
 		shiftEnd = end - lastEnd
 		for i, windowFunc := range p.windowFuncs {
-			slidingWindowAggFunc, ok := windowFunc.(aggfuncs.SlidingWindowAggFunc)
-			if ok && initializedSlidingWindow {
-				err = slidingWindowAggFunc.Slide(ctx, rows, lastStart, lastEnd, shiftStart, shiftEnd, p.partialResults[i])
+			if windowFunc.ImplementedSlide() && initializedSlidingWindow {
+				err = windowFunc.Slide(ctx, rows, lastStart, lastEnd, shiftStart, shiftEnd, p.partialResults[i])
 			} else {
 				err = windowFunc.UpdatePartialResult(ctx, rows[start:end], p.partialResults[i])
 				initializedSlidingWindow = true
@@ -331,7 +330,7 @@ func (p *rowFrameWindowProcessor) appendResult2Chunk(ctx sessionctx.Context, row
 			if err != nil {
 				return nil, err
 			}
-			if !ok {
+			if !windowFunc.ImplementedSlide() {
 				windowFunc.ResetPartialResult(p.partialResults[i])
 			}
 		}
