@@ -548,6 +548,8 @@ func benchmarkWindowExecWithCase(b *testing.B, casTest *windowTestCase) {
 			switch typ.Tp {
 			case mysql.TypeLong, mysql.TypeLonglong:
 				return int64(row)
+			case mysql.TypeDouble:
+				return float64(row)
 			case mysql.TypeVarString:
 				return casTest.rawDataSmall
 			default:
@@ -684,6 +686,8 @@ func BenchmarkWindowFunctionsWithSlidingWindow(b *testing.B) {
 	frames := []*core.WindowFrame{
 		{Type: ast.Rows, Start: &core.FrameBound{Type: ast.Preceding, Num: 10}, End: &core.FrameBound{Type: ast.Following, Num: 10}},
 		{Type: ast.Rows, Start: &core.FrameBound{Type: ast.Preceding, Num: 100}, End: &core.FrameBound{Type: ast.Following, Num: 100}},
+		//{Type: ast.Ranges, Start: &core.FrameBound{Type: ast.Preceding, Num: 10}, End: &core.FrameBound{Type: ast.Following, Num: 10}},
+		//{Type: ast.Ranges, Start: &core.FrameBound{Type: ast.Preceding, Num: 100}, End: &core.FrameBound{Type: ast.Following, Num: 100}},
 	}
 	for _, row := range rows {
 		for _, ndv := range ndvs {
