@@ -21,6 +21,16 @@ import (
 	"github.com/pingcap/tidb/util/stringutil"
 )
 
+type maxMinValue struct {
+	count int
+	value interface{}
+}
+
+type maxMinQueue struct {
+	queue    []*maxMinValue
+	valueMap map[interface{}]*maxMinValue
+}
+
 type partialResult4MaxMinInt struct {
 	val int64
 	// isNull is used to indicates:
