@@ -5898,3 +5898,28 @@ func (s *testSuite) TestSlowQuerySensitiveQuery(c *C) {
 			"set password for user user_sensitive@%;",
 		))
 }
+
+// For issue 16362.
+func (s *testSuite) TestPreparedWindowFunctions(c *C) {
+	tk := testkit.NewTestKit(c, s.store)
+	tk.MustExec("use test;")
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t(a int, b int);")
+	tk.MustExec("insert into t values(1,2),(1,3),(2,3),(-1,1),(-1,-1);")
+
+	tk.MustExec(`prepare stmt1 from "select nth_value(b, ?) over w from t window w as (partition by a order by a, b) order by a, b";`)
+	tk.MustExec("set @a=1;")
+	tk.MustQuery("execute stmt1 using @a;").Check(testkit.Rows("-1", "-1", "2", "2", "3"))
+
+	tk.MustExec(`prepare stmt2 from "select ntile(?) over w from t window w as (partition by a order by a, b) order by a, b";`)
+	tk.MustExec("set @a=2;")
+	tk.MustQuery("execute stmt2 using @a;").Check(testkit.Rows("1", "2", "1", "2", "1"))
+
+	tk.MustExec(`prepare stmt3 from "select lead(b, ?) over w from t window w as (partition by a order by a, b) order by a, b";`)
+	tk.MustExec("set @a=1;")
+	tk.MustQuery("execute stmt3 using @a;").Check(testkit.Rows("1", "<nil>", "3", "<nil>", "<nil>"))
+
+	tk.MustExec(`prepare stmt4 from "select lag(b, ?) over w from t window w as (partition by a order by a, b) order by a, b";`)
+	tk.MustExec("set @a=1;")
+	tk.MustQuery("execute stmt4 using @a;").Check(testkit.Rows("<nil>", "-1", "<nil>", "2", "<nil>"))
+}

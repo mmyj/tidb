@@ -831,7 +831,7 @@ func RemoveDupExprs(ctx sessionctx.Context, exprs []Expression) []Expression {
 }
 
 // GetUint64FromConstant gets a uint64 from constant expression.
-func GetUint64FromConstant(expr Expression) (uint64, bool, bool) {
+func GetUint64FromConstant(ctx sessionctx.Context, expr Expression) (uint64, bool, bool) {
 	con, ok := expr.(*Constant)
 	if !ok {
 		logutil.BgLogger().Warn("not a constant expression", zap.String("expression", expr.ExplainInfo()))
@@ -859,6 +859,12 @@ func GetUint64FromConstant(expr Expression) (uint64, bool, bool) {
 		return uint64(val), false, true
 	case types.KindUint64:
 		return dt.GetUint64(), false, true
+	case types.KindString:
+		newDt, err := dt.ConvertTo(ctx.GetSessionVars().StmtCtx, types.NewFieldType(mysql.TypeLonglong))
+		if err != nil {
+			return 0, true, true
+		}
+		return newDt.GetUint64(), false, true
 	}
 	return 0, false, false
 }

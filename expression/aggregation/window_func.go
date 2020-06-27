@@ -30,13 +30,13 @@ type WindowFuncDesc struct {
 func NewWindowFuncDesc(ctx sessionctx.Context, name string, args []expression.Expression) (*WindowFuncDesc, error) {
 	switch strings.ToLower(name) {
 	case ast.WindowFuncNthValue:
-		val, isNull, ok := expression.GetUint64FromConstant(args[1])
+		val, isNull, ok := expression.GetUint64FromConstant(ctx, args[1])
 		// nth_value does not allow `0`, but allows `null`.
 		if !ok || (val == 0 && !isNull) {
 			return nil, nil
 		}
 	case ast.WindowFuncNtile:
-		val, isNull, ok := expression.GetUint64FromConstant(args[0])
+		val, isNull, ok := expression.GetUint64FromConstant(ctx, args[0])
 		// ntile does not allow `0`, but allows `null`.
 		if !ok || (val == 0 && !isNull) {
 			return nil, nil
@@ -45,8 +45,9 @@ func NewWindowFuncDesc(ctx sessionctx.Context, name string, args []expression.Ex
 		if len(args) < 2 {
 			break
 		}
-		_, isNull, ok := expression.GetUint64FromConstant(args[1])
-		if !ok || isNull {
+		val, isNull, ok := expression.GetUint64FromConstant(ctx, args[1])
+		// nth_value does not allow `0`, but allows `null` case prepared sql.
+		if !ok || (val == 0 && !isNull) {
 			return nil, nil
 		}
 	}
