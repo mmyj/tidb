@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
+	"unsafe"
 )
 
 // valueEvaluator is used to evaluate values for `first_value`, `last_value`, `nth_value`,
@@ -215,6 +216,15 @@ func buildValueEvaluator(tp *types.FieldType) valueEvaluator {
 	return nil
 }
 
+const (
+	// DefPartialResult4FirstValueSize is the size of partialResult4FirstValue
+	DefPartialResult4FirstValueSize = int64(unsafe.Sizeof(partialResult4FirstValue{}))
+	// DefPartialResult4LastValueSize is the size of partialResult4LastValue
+	DefPartialResult4LastValueSize = int64(unsafe.Sizeof(partialResult4LastValue{}))
+	// DefPartialResult4NthValueSize is the size of partialResult4NthValue
+	DefPartialResult4NthValueSize = int64(unsafe.Sizeof(partialResult4NthValue{}))
+)
+
 type firstValue struct {
 	baseAggFunc
 
@@ -227,7 +237,7 @@ type partialResult4FirstValue struct {
 }
 
 func (v *firstValue) AllocPartialResult() (pr PartialResult, memDelta int64) {
-	return PartialResult(&partialResult4FirstValue{evaluator: buildValueEvaluator(v.tp)}), 0
+	return PartialResult(&partialResult4FirstValue{evaluator: buildValueEvaluator(v.tp)}), DefPartialResult4FirstValueSize
 }
 
 func (v *firstValue) ResetPartialResult(pr PartialResult) {
@@ -238,16 +248,16 @@ func (v *firstValue) ResetPartialResult(pr PartialResult) {
 func (v *firstValue) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) (memDelta int64, err error) {
 	p := (*partialResult4FirstValue)(pr)
 	if p.gotFirstValue {
-		return 0, nil
+		return memDelta, nil
 	}
 	if len(rowsInGroup) > 0 {
 		p.gotFirstValue = true
 		err := p.evaluator.evaluateRow(sctx, v.args[0], rowsInGroup[0])
 		if err != nil {
-			return 0, err
+			return memDelta, err
 		}
 	}
-	return 0, nil
+	return memDelta, nil
 }
 
 func (v *firstValue) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
@@ -272,7 +282,7 @@ type partialResult4LastValue struct {
 }
 
 func (v *lastValue) AllocPartialResult() (pr PartialResult, memDelta int64) {
-	return PartialResult(&partialResult4LastValue{evaluator: buildValueEvaluator(v.tp)}), 0
+	return PartialResult(&partialResult4LastValue{evaluator: buildValueEvaluator(v.tp)}), DefPartialResult4LastValueSize
 }
 
 func (v *lastValue) ResetPartialResult(pr PartialResult) {
@@ -315,7 +325,7 @@ type partialResult4NthValue struct {
 }
 
 func (v *nthValue) AllocPartialResult() (pr PartialResult, memDelta int64) {
-	return PartialResult(&partialResult4NthValue{evaluator: buildValueEvaluator(v.tp)}), 0
+	return PartialResult(&partialResult4NthValue{evaluator: buildValueEvaluator(v.tp)}), DefPartialResult4NthValueSize
 }
 
 func (v *nthValue) ResetPartialResult(pr PartialResult) {
