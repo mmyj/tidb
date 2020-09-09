@@ -17,6 +17,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/executor/aggfuncs"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/types"
 )
@@ -110,5 +111,21 @@ func (s *testSuite) TestLeadLag(c *C) {
 	}
 	for _, test := range tests {
 		s.testWindowFunc(c, test)
+	}
+}
+
+func (s *testSuite) TestMemLeadLagRank(c *C) {
+	tests := []windowMemTest{
+		buildWindowMemTester(ast.WindowFuncLead, mysql.TypeLonglong, 0, 100, 1,
+			aggfuncs.DefPartialResult4LeadLagSize, rowMemDeltaGens),
+		buildWindowMemTester(ast.WindowFuncLead, mysql.TypeLonglong, 0, 100, 0,
+			aggfuncs.DefPartialResult4LeadLagSize, rowMemDeltaGens),
+		buildWindowMemTester(ast.WindowFuncLag, mysql.TypeLonglong, 0, 100, 1,
+			aggfuncs.DefPartialResult4LeadLagSize, rowMemDeltaGens),
+		buildWindowMemTester(ast.WindowFuncLag, mysql.TypeLonglong, 0, 100, 0,
+			aggfuncs.DefPartialResult4LeadLagSize, rowMemDeltaGens),
+	}
+	for _, test := range tests {
+		s.testWindowAggMemFunc(c, test)
 	}
 }
