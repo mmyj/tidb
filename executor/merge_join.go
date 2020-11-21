@@ -339,6 +339,7 @@ func (e *MergeJoinExec) Next(ctx context.Context, req *chunk.Chunk) (err error) 
 			}
 		}
 
+		// 双指针法遍历outerIter和innerIter
 		cmpResult := -1
 		if e.desc {
 			cmpResult = 1
@@ -350,19 +351,25 @@ func (e *MergeJoinExec) Next(ctx context.Context, req *chunk.Chunk) (err error) 
 			}
 		}
 		// the inner group falls behind
+		// 用升序举例，若innerIter较小
+		// innerIter取下一行，直到innerIter>=outerIter
 		if (cmpResult > 0 && !e.desc) || (cmpResult < 0 && e.desc) {
 			innerIter.ReachEnd()
 			continue
 		}
 		// the outer group falls behind
+		// innerIter>=outerIter的话，又要移动outerIter，直到innerIter<=outerIter
 		if (cmpResult < 0 && !e.desc) || (cmpResult > 0 && e.desc) {
 			for row := outerIter.Current(); row != outerIter.End() && !req.IsFull(); row = outerIter.Next() {
+				// 根据join类型的不同，处理外表不匹配的情况
 				e.joiner.onMissMatch(false, row, req)
 			}
 			continue
 		}
 
+		// 到这里就是innerIter==outerIter了
 		for row := outerIter.Current(); row != outerIter.End() && !req.IsFull(); row = outerIter.Next() {
+			// FIXME filtersSelected这个还不懂有什么用
 			if !e.outerTable.filtersSelected[row.Idx()] {
 				e.joiner.onMissMatch(false, row, req)
 				continue
@@ -370,6 +377,7 @@ func (e *MergeJoinExec) Next(ctx context.Context, req *chunk.Chunk) (err error) 
 			// compare each outer item with each inner item
 			// the inner maybe not exhausted at one time
 			for innerIter.Current() != innerIter.End() {
+				// FIXME tryToMatchInners接口里面会移动innerIter游标，具体干了啥之后再看
 				matched, isNull, err := e.joiner.tryToMatchInners(row, innerIter, req)
 				if err != nil {
 					return err
@@ -395,6 +403,7 @@ func (e *MergeJoinExec) Next(ctx context.Context, req *chunk.Chunk) (err error) 
 	return nil
 }
 
+// outerRow小返回-1，outerRow大返回1，相等返回0
 func (e *MergeJoinExec) compare(outerRow, innerRow chunk.Row) (int, error) {
 	outerJoinKeys := e.outerTable.joinKeys
 	innerJoinKeys := e.innerTable.joinKeys
